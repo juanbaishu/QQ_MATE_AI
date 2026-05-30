@@ -93,17 +93,25 @@ def on_message(ws, message):         # won_message：是库定义的关键字参
                     message_image_url = segment.get("data", {}).get("url")          # 获取图片 url
                     print("正在提取图片并转码...")
                     message_image_base64 = url_to_base64(message_image_url)         # 下载图片的 base64
+
                     if message_image_base64:
-                        chat_history.append({"role": "user", "content": [{"type": "image_url", 
+                        # 1. 临时组装一个带图片的数据包，只给通义千问看，不污染全局记忆
+                        temp_message = chat_history.copy()
+                        temp_message.append({"role": "user", "content": [{"type": "image_url", 
                                                                           "image_url":{"url": message_image_base64} 
                                                                           }] })     # "user"、"type"、"image_url"、"url"是关键字，后两个分别是 对象、键名
                                                                                     # OpenAI里规定 type 是 image_url 而不是 image
+                        # 2. 呼叫通义千问处理这个临时记忆
                         ai_response = client_qw.chat.completions.create (
                             model = "qwen3-vl-plus",
-                            messages = chat_history,
+                            messages = temp_message,
                             temperature = 0.8
                         )
-                        ai_reply = ai_response.choices[0].message.content
+                        ai_reply = ai_response.choices[0].message.content       # 图片处理模型的回复
+                        chat_history.append({
+                            "role":"user",
+                            "content": f"[我发送了一张图片，你当时看到的画面和反应是：{ai_reply}]"      # {} 是字符串格式化/f-string 的占位符语法
+                            })
                     else:
                         ai_reply = "图片好像加载失败了笨蛋...> <"         # 新增：加一个兜底回复，防止程序崩溃卡死
 
