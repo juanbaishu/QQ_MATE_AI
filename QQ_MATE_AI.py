@@ -67,29 +67,16 @@ def on_message(ws, message):         # won_message：是库定义的关键字参
         message_text = ""
         message_image_url = None
         message_image_base64 = ""       # img --> 文本编码
+        ai_reply = "网卡了"             # 初始化，发生网络波动为正常接收 api 信息的情况
 
         for segment in message_data:
             ai_reply = "这是什么表情包？"           # 防止收到其他类型消息识别不出来而崩溃
             try:
                 segment_type = segment.get("type")        # 从segment中取出 data字典，再从中取出 text类型。如果不存在"data"就返回空字典，如果不存在text就返回空
 
-                # 文本信息处理
+                # 存入图片信息，qwen对图片的描述 == 用户使用图片表达的内容
 
-                if segment_type == "text":
-                    message_text = segment.get("data",{}).get("text","")
-                    # 把你的话存入记忆
-                    chat_history.append({"role": "user", "content": message_text})         # "user"是API协议中规定的关键字，代表用户说的话
-                                    # 呼叫大模型思考回复
-                    ai_response = client_ds.chat.completions.create (         # 调用大模型 API，让它根据 chat_history 里的内容生成回复。
-                        model = "deepseek-v4-flash",
-                        messages = chat_history,                # messages 是 API 关键字
-                        temperature = 0.8
-                    )
-                    ai_reply = ai_response.choices[0].message.content                # 大模型回复一般只有一个，choice[0]是选择第一个。content是固定要求
-
-                # 图片信息处理
-
-                elif segment_type == "image":
+                if segment_type == "image":
                     message_image_url = segment.get("data", {}).get("url")          # 获取图片 url
                     print("正在提取图片并转码...")
                     message_image_base64 = url_to_base64(message_image_url)         # 下载图片的 base64
@@ -107,38 +94,65 @@ def on_message(ws, message):         # won_message：是库定义的关键字参
                             messages = temp_message,
                             temperature = 0.8
                         )
-                        ai_reply = ai_response.choices[0].message.content       # 图片处理模型的回复
+                        img_description = ai_response.choices[0].message.content       # 图片处理模型的回复
+
+                        # 用户发图片动作信息存入记忆
                         chat_history.append({
-                            "role":"user",
-                            "content": f"[我发送了一张图片，你当时看到的画面和反应是：{ai_reply}]"      # {} 是字符串格式化/f-string 的占位符语法
-                            })
+                            "role": "user",
+                            "content": f"用户发送了一个图片{img_description}"
+                        })
+
                     else:
-                        ai_reply = "图片好像加载失败了笨蛋...> <"         # 新增：加一个兜底回复，防止程序崩溃卡死
+                        img_description = "图片丢失"         # 新增：加一个兜底回复，防止程序崩溃卡死
 
+                # 存入文本信息
+                if segment_type == "text":
+                    message_text = segment.get("data",{}).get("text","")
+                    # 把你的话存入记忆
+                    chat_history.append({"role": "user", "content": message_text})         # "user"是API协议中规定的关键字，代表用户说的话
 
-                print(f"小夕回复: {ai_reply}")       # 日志信息，不会发到qq
-
-                # 把小夕的话也存入记忆
-                chat_history.append({"role": "assistant", "content": ai_reply})        # assistant 是 API 规定关键字，代表ai视角
-            
-                # 组装数据包，通过 WebSocket 发送回 QQ
-                reply_pocket = {                        # reply_packet 是一个 字典/键值对容器，里面写明了要执行的动作："send_private_msg"（发送私聊消息），以及参数：发给谁（user_id）和发什么（message）。
-                    "action": "send_private_msg",        # 注意这里的 ”“ 信息都是 API 关键字
-                    "params": {
-                        "user_id": user_id,            # 注意这里的 "user_id" 和上面的不是一个东西，因为都是函数内的局部变量(关键字/键名)
-                        "message": ai_reply
-                    }
-                }
-                ws.send(json.dumps(reply_pocket))       # 将字典 --> json字符串，以便于发送，如果收到表情包类型，则发送空
-                
-
-                # 防止记忆太长，只保留最近 20 条
-                if len(chat_history) > 21:          # [SYSTEM_PROMPT]人设占一条，剩下的才是正常对话20条
-                    chat_history = [SYSTEM_PROMPT] + chat_history[-20:]      # 保留 人设 和 取倒数20个元素组成的列表。
-                
             # 异常处理
             except Exception as e:          # Exception是异常基类，里面包含了几乎所有异常情况，异常情况保存到 e 中
-                print(f"❌ AI 思考时崩溃了: {e}")
+                print(f"❌ AI 存入记忆时崩溃了: {e}")
+
+
+        try:
+            # deepseek 模型进行回复------------------------------------
+
+            # 呼叫大模型思考回复
+            ai_response = client_ds.chat.completions.create (         # 调用大模型 API，让它根据 chat_history 里的内容生成回复。
+                model = "deepseek-v4-flash",
+                messages = chat_history,                # messages 是 API 关键字
+                temperature = 0.8
+            )
+            ai_reply = ai_response.choices[0].message.content                # 大模型回复一般只有一个，choice[0]是选择第一个。content是固定要求
+
+            # 把小夕的话也存入记忆
+            chat_history.append({"role": "assistant", "content": ai_reply})        # assistant 是 API 规定关键字，代表ai视角
+
+
+
+
+            print(f"小夕回复: {ai_reply}")       # 日志信息，不会发到qq
+            
+            # 组装数据包，通过 WebSocket 发送回 QQ
+            reply_pocket = {                        # reply_packet 是一个 字典/键值对容器，里面写明了要执行的动作："send_private_msg"（发送私聊消息），以及参数：发给谁（user_id）和发什么（message）。
+                "action": "send_private_msg",        # 注意这里的 ”“ 信息都是 API 关键字
+                "params": {
+                    "user_id": user_id,            # 注意这里的 "user_id" 和上面的不是一个东西，因为都是函数内的局部变量(关键字/键名)
+                    "message": ai_reply
+                }
+            }
+            ws.send(json.dumps(reply_pocket))       # 将字典 --> json字符串，以便于发送，如果收到表情包类型，则发送空
+                
+
+            # 防止记忆太长，只保留最近 100 条
+            if len(chat_history) > 101:          # [SYSTEM_PROMPT]人设占一条，剩下的才是正常对话100条
+                chat_history = [SYSTEM_PROMPT] + chat_history[-100:]      # 保留 人设 和 取倒数100个元素组成的列表。
+                
+        # 异常处理
+        except Exception as e:          # Exception是异常基类，里面包含了几乎所有异常情况，异常情况保存到 e 中
+            print(f"❌ AI 思考时崩溃了: {e}")
 
 def on_open(ws):        # on_open 是 API 中的关键字
     print("🚀 成功连接到 NapCatQQ！小夕在 QQ 守护着你...")        # 打印到日志中
