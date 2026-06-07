@@ -1,45 +1,17 @@
 ﻿# 主程序控制中心
 import os			                # 将 Python 标准库中的 os 模块引入到当前程序中
 import json			                # JavaScript 格式，最通用的文本格式
-import websocket	                # 连接 Python 和 NapCatqq 的 网络通信协议
-import requests                     # 用于伪装浏览器去下载图片
-import base64                       # 图片转译成文本编码 的 工具
-
-import logging
-# ==========================================
-# 日志系统配置
-# ==========================================
-logging.basicConfig(
-    level=logging.INFO,  # 记录的最低级别，INFO及以上的都会被记录
-    format='%(asctime)s [%(levelname)s] %(message)s',  # 日志格式：时间 [级别] 消息内容
-    datefmt='%Y-%m-%d %H:%M:%S',  # 时间格式
-    handlers=[
-        logging.FileHandler("logs/ai_bot.log", encoding="utf-8", mode='a'),  # 1. 写入到文件 (a表示追加模式)
-        logging.StreamHandler()  # 2. 同时输出到黑色控制台
-    ]
-)
+import websocket	                # 连接 Python 和 NapCatqq 的 网络通信协议     
+import logging                      # 引入 python 官方的 logging 库，以便在代码里打日志
 
 # 从拆分出来的文档中，导入需要的工具
 from config import WS_URL
 #from ai_service import qw_describe_img, ds_general_reply		# 定义的两个方法
 from services import ai_service
 from services import memory_service
-
-# ------------------------------工具函数-----------------------------
-def url_to_base64(image_url):
-    try:
-        # 伪装成浏览器请求，避免被腾讯拦截
-        headers = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0'}  # HTTP请求头（Request Headers）字典，主要用于模拟浏览器访问，避免被网站识别为爬虫而拦截。
-        response = requests.get(image_url, headers=headers, timeout=10)     # 使用 requests 工具进行伪装，三个参数分别是：图片的 URL 地址、请求头（模拟浏览器）、超时时间 10 秒(超时就报异常)
-        if response.status_code==200:       # http状态码：200 ==> 请求成功
-            # 转化            
-            base64_data = base64.b64encode(response.content).decode('utf-8')      # 使用 base64.   意为   使用 base64库中的方法，b64enable() --> base64格式编码，字符串解码
-            # 返回 经过""中解析方式解析后的  字符串f
-            return f"data:image/jpeg;base64,{base64_data}"      # 这些是 Data URL 协议中的关键字，f是字符串前缀标记，data:是协议标识	表示这是 Data URL，不是 http:// 或 https://
-                                                                # image/jpeg	MIME 类型	告诉浏览器这是 JPEG 图片;base64	编码方式	表示后面的数据是 Base64 编码的
-    except Exception as e:
-        logging.info(f"⚠️ 图片下载失败: {e}")
-        return None
+from utils.image_tools import url_to_base64
+from utils import logs_tools                    # 日志的配置文件，会自动执行
+from utils import process_tools
 
 # ==========================================
 # 核心逻辑：当 QQ 收到私聊消息时
@@ -57,7 +29,7 @@ def on_message(ws, message):
 
         message_data = data.get("message",[])   # 接收发来的消息，([]意为)存储消息列表(多个segment)
 
-        logging.info(f"收到 QQ({user_id}) 的消息: {message}")       # 日志信息，不会发到qq
+        logging.info(f"收到 QQ({user_id}) 的消息: ...")       # 日志信息，不会发到qq
 
         # 区分消息类型
         message_text = ""
@@ -132,27 +104,8 @@ def on_open(ws):        # 判断启动
 # 启动入口
 # ==========================================
 if __name__ == "__main__":
-    # 自动清除相同的进程分身
-    import pydoc
-    import subprocess
-    current_pid = os.getpid()       # 获取当前进程的 PID
-    current_script = os.path.basename(__file__)     # 获取当前执行的文件名（例如 main.py）
-    try:
-        # 使用 Linux 的 ps 命令查找所有运行该脚本的 PID
-        # awk '{print $2}' 用来提取 PID 这一列
-        cmd = f"ps -ef | grep {current_script} | grep -v grep | awk '{{print $2}}'"
-        pids = subprocess.check_output(cmd, shell=True).decode().split()            # 执行 shell 命令，捕获输出（字节形式），然后 将字节输出转换为字符串（通常 UTF-8），最后 按空白字符分割，得到 PID 字符串列表
-        
-        for pid in pids:
-            pid = int(pid)
-            if pid != current_pid:
-                os.kill(pid, 9)
-                logging.info(f"🧹 已自动清理历史残留的 Linux 后台进程 (PID: {pid})...")
-    except Exception as e:
-        # 如果没有找到其他进程，subprocess 会报错，直接忽略即可
-        pass
-
-    logging.info("🚀 正在启动持续监听...")
+    # 自动清理重复进程
+    process_tools.clear_duplicate_process("QQ_MATE_AI.py")
 
     # 启动持续监听            # WS_URL 设置 WebSocket 连接的地址。127.0.0.1 是本机 IP，3001 是 NapCatQQ 默认开放的端口。如果你的 NapCatQQ 设置的端口不同，需要改这里。
     ws = websocket.WebSocketApp(WS_URL, on_message=on_message, on_open=on_open)     # python中加 = 才能覆盖
