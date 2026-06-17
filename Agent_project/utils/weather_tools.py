@@ -1,4 +1,5 @@
 import requests         # 已包含 json 解析工具
+import logging
 
 # 获取天气信息，通过 requests 发送 HTTP 请求，并使用 wttr.in 天气 API
 def get_weather(city: str) -> str:		# (参数: 类型) -> 返回类型
@@ -32,8 +33,8 @@ def get_weather(city: str) -> str:		# (参数: 类型) -> 返回类型
 
     except requests.exceptions.RequestException as e:
         # 处理网络错误
-        print(f"错误：查询天气时发生网络异常，{e}")        # f 能让字符串 e 替换
+        logging.error(f"错误：查询天气时发生网络异常，{e}")        # f 能让字符串 e 替换
 
     except (KeyError, IndexError) as e:
         # 处理数据解析错误
-        print(f"错误：解析天气数据失效，可能是城市名无效，{e}")
+        logging.error(f"错误：解析天气数据失效，可能是城市名无效，{e}")
