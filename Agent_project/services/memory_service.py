@@ -40,14 +40,37 @@ def add_user_message_to_history(text, img_desc="", img_failed=False):			# 输入
 	_chat_history.append({"role": "user", "content": message_content})
 	_trim_history()
 
+
+
 def _trim_history():
 	"""内部工具：防止记忆拉得太长爆 Token，始终保留人设和最近100条对话"""
 	global _chat_history				# 函数内修改全局变量需要先声明
 	if len(_chat_history) > 101:		# 人设 + 对话100
-		_chat_history = [SYSTEM_PROMPT] + _chat_hostory[-100:]
+		_chat_history = [SYSTEM_PROMPT] + _chat_history[-100:]
 
 
 
+# ==========================================
+# 新增：专为工具调用（Function Calling）准备的记忆方法
+# ==========================================
+def add_tool_request_to_history(tool_calls_message):
+	"""
+	记录大模型在思考过程中发出的“工具调用请求”
+	"""
+	_chat_history.append(tool_calls_message)
+	_trim_history()
+
+def add_tool_result_to_history(tool_call_id, tool_name, result_text):
+	"""
+	记录本地工具执行完后的真实结果，返回给大模型看
+	"""
+	_chat_history.append({
+		"role": "tool",
+		"tool_call_id": tool_call_id,
+		"name": tool_name,
+		"content": str(result_text)
+	})
+	_trim_history()
 
 
 # 下面两个函数暂时用不到
