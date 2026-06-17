@@ -5,9 +5,9 @@ def get_weather(city: str) -> str:		# (参数: 类型) -> 返回类型
     """
     通过调用 wttr.in API 查询真实的天气信息。
     """
-	# API端点，我们请求JSON格式的数据
+    # API端点，我们请求JSON格式的数据
     url = f"https://wttr.in/{city}?format=j1"           # 完全免费的 API 不需要 API KEY，写法在官网手册上有 https://wttr.in/:help，?format=j1 就是告诉服务器："给我JSON格式的数据"。
-
+    
     try:
         # 发起网络请求
         response = requests.get(url)
@@ -37,8 +37,3 @@ def get_weather(city: str) -> str:		# (参数: 类型) -> 返回类型
     except (KeyError, IndexError) as e:
         # 处理数据解析错误
         print(f"错误：解析天气数据失效，可能是城市名无效，{e}")
-        
-if __name__ == "__main__":
-    # 测试一下
-    print(get_weather("Beijing"))
-    print(get_weather("Shanghai"))

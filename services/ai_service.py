@@ -1,9 +1,11 @@
-﻿from openai import OpenAI	        # 从 openai 这个库中直接导入 OpenAI 这个类（或对象）。前者用于调用 openai的 API，后者是 客户端类，用于管理这些 API
+﻿import logging
+from openai import OpenAI	        # 从 openai 这个库中直接导入 OpenAI 这个类（或对象）。前者用于调用 openai的 API，后者是 客户端类，用于管理这些 API
 from config import (
 	DEEPSEEK_API_KEY,DEEPSEEK_BASE_URL,DEEPSEEK_MODEL,
 	QWEN_API_KEY,QWEN_BASE_URL,QWEN_MODEL
 )
-
+from services import memory_service
+from services.tool_service import TOOL_SCHEMA, dispatch_tool
 # 1. 初始化两个大模型的客户端
 client_ds = OpenAI(api_key=DEEPSEEK_API_KEY,base_url=DEEPSEEK_BASE_URL)
 client_qw = OpenAI(api_key=QWEN_API_KEY,base_url=QWEN_BASE_URL)
@@ -31,17 +33,61 @@ def qw_describe_img(image_base64):
 
 def ds_general_reply(chat_history):
     """
-    功能：让 DeepSeek 根据上下文生成聊天回复
+    功能：让 DeepSeek 根据上下文生成聊天回复，具备自主调用工具能力
     参数：chat_history(历史记忆)
     """
-    # 呼叫大模型思考回复
     try:
-        ai_response = client_ds.chat.completions.create (         # 调用大模型 API，让它根据 chat_history 里的内容生成回复。
+        # 第一趟：带着工具箱去问大模型
+        ai_response_first = client_ds.chat.completions.create (
             model = DEEPSEEK_MODEL,
-            messages = chat_history,                # messages 是 API 关键字
-            temperature = 0.8
+            messages = chat_history,
+            tools = TOOL_SCHEMA,               # 把工具箱说明书喂给大模型
+            tool_choice = "auto",             # 让大模型自主决定用不用工具
+            temperature = 0.2
         )
-        return ai_response.choices[0].message.content                # 大模型回复一般只有一个，choice[0]是选择第一个。content是固定要求
+        response_message_first = ai_response_first.choices[0].message
+
+
+        # ==========================================================
+        # 分支一：【工具调用流】如果大模型说“我要用工具”（比如查天气）
+        # ==========================================================
+
+        # 判断：大模型是否要求用工具？
+        if response_message_first.tool_calls:
+            # 1. 存入大模型的思考意图
+            memory_service.add_tool_request_to_history(response_message_first)
+
+            # 2. 依次调用工具查数据
+            for tool_call in response_message_first.tool_calls:
+                t_name = tool_call.function.name
+                t_args = tool_call.function.arguments       # 这是一个包含参数的 JSON 字符串
+                logging.info(f"⚙️ 小夕调用工具: {t_name} -> 参数: {t_args}")
+                tool_result = dispatch_tool(t_name, t_args)
+
+                # 3. 从tool视角(默认值就是)，存入真实的工具结果
+                memory_service.add_tool_result_to_history(     # 调用函数，传入形参
+                    tool_call_id = tool_call.id,
+                    tool_name = t_name,
+                    result_text = tool_result
+                )
+
+            # 4. 第二趟：大模型看着刚查到的数据，重新组织语言回复
+            logging.info(" -> 小夕已获得真实数据，正在组织语言中...")
+            ai_response_second = client_ds.chat.completions.create (
+                model = DEEPSEEK_MODEL,
+                messages = memory_service.get_history(),
+                temperature = 0.8
+            )
+            response_message_second = ai_response_second.choices[0].message.content
+            return response_message_second
+
+        # ==========================================================
+        # 分支二：【纯纯闲聊流】如果大模型觉得不需要用工具
+        # ==========================================================
+        else:
+            return response_message_first.content
+
+
     except Exception as e:
-        print(f"❌ AI 思考时崩溃了: {e}")
+        logging.error(f"❌ AI 思考时崩溃了: {e}")
         return "呜呜，小夕的脑子突然卡壳了……网卡了笨蛋！"
