@@ -1,4 +1,4 @@
-﻿# 主程序控制中心
+# 主程序控制中心
 import os			                # 将 Python 标准库中的 os 模块引入到当前程序中
 import json			                # JavaScript 格式，最通用的文本格式
 import websocket	                # 连接 Python 和 NapCatqq 的 网络通信协议     
@@ -9,9 +9,11 @@ from config import WS_URL
 #from ai_service import qw_describe_img, ds_general_reply		# 定义的两个方法
 from services import ai_service
 from services import memory_service
+from services import ws_service                 # 控制websocket的库，用于主动发消息
 from utils.image_tools import url_to_base64
 from utils import logs_tools                    # 日志的配置文件，会自动执行
 from utils import process_tools
+
 
 # ==========================================
 # 核心逻辑：当 QQ 收到私聊消息时
@@ -80,23 +82,24 @@ def on_message(ws, message):
 
         # 呼叫 DeepSeek 思考回复（如果报错，ai_service 内部会返回“网卡了笨蛋”）
         logging.info(" -> 小夕正在组织语言...")
-        ai_message = ai_service.ds_general_reply(memory_service.get_history())
+        ai_message = ai_service.ds_general_reply(user_id, memory_service.get_history())
 
         # 存入 assistant 记忆历史
         memory_service.add_ai_message_to_history(ai_message)
         logging.info(f"[小夕说]: {ai_message}")
 
         # 组装数据包发回 QQ
-        reply_pocket = {
-                "action": "send_private_msg",        # "action" 是字符串键
-                "params": {                          # "params" 是字符串键
-                    "user_id": user_id,              # "user_id" 是字符串键，user_id 是变量，上面有
-                    "message": ai_message            # "message" 是字符串键，ai_message 是变量，上面有
+        reply_pocket = {            # 基于onebot协议的架构
+                "action": "send_private_msg",        # "action" 是键名，"send_private_msg"是onebot协议中的api名称
+                "params": {                          # "params" 是键名
+                    "user_id": user_id,              # "user_id" 是键名，user_id 是变量，上面有
+                    "message": ai_message            # "message" 是键名，ai_message 是变量，上面有
                 }
         }
         ws.send(json.dumps(reply_pocket))       # 将字典 --> json字符串，以便于发送，如果收到表情包类型，则发送空
 
 def on_open(ws):        # 判断启动
+    ws_service.set_ws(ws)     # 缓存 websocket 实例供后台使用
     logging.info("🚀 成功连接到 NapCatQQ！小夕在 QQ 守护着你...")        # 打印到日志中
 
 
