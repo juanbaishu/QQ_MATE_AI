@@ -1,4 +1,4 @@
-﻿# 用于操纵主进程中 websocket 服务的库文件
+# 用于操纵主进程中 websocket 服务的库文件
 import json
 import logging
 

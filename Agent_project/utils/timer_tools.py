@@ -1,4 +1,4 @@
-﻿# 用于实现 倒计时 和 绝对时间 两个时间功能，涉及多线程操作
+# 用于实现 倒计时 和 绝对时间 两个时间功能，涉及多线程操作
 # 这里实现的是 多线程 和 异步回调，所以每个任务都是隔离的，不会变量混淆
 import logging
 from datetime import datetime, timedelta        # python自带时间库

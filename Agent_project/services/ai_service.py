@@ -1,9 +1,9 @@
-﻿import logging
+import logging
 import copy         # 引入深拷贝
-from openai import OpenAI	        # 从 openai 这个库中直接导入 OpenAI 这个类（或对象）。前者用于调用 openai的 API，后者是 客户端类，用于管理这些 API
+from openai import OpenAI           # 从 openai 这个库中直接导入 OpenAI 这个类（或对象）。前者用于调用 openai的 API，后者是 客户端类，用于管理这些 API
 from config import (
-	DEEPSEEK_API_KEY,DEEPSEEK_BASE_URL,DEEPSEEK_MODEL,
-	QWEN_API_KEY,QWEN_BASE_URL,QWEN_MODEL
+    DEEPSEEK_API_KEY,DEEPSEEK_BASE_URL,DEEPSEEK_MODEL,
+    QWEN_API_KEY,QWEN_BASE_URL,QWEN_MODEL
 )
 from services import memory_service
 from services.tool_service import TOOL_SCHEMA, dispatch_tool
@@ -47,6 +47,7 @@ def ds_general_reply(user_id, chat_history):
         temp_history.insert(1, {
             "role": "system",
             "content": f"【系统当前绝对时间：{current_time_str}】。如果用户提到今天、明天、下午等时间，请以此时间为基准推算。"
+            f"【最高指令】：调用工具时，必须 100% 严格使用工具说明书中定义的参数名称（如 time_str, target_time），绝对禁止自行发明或修改参数名！"
         })
 
         # 第一趟：这里判断需要调用那些 工具函数，带着工具箱去问大模型
