@@ -7,7 +7,7 @@ from config import (
 )
 from services import memory_service
 from services.tool_service import TOOL_SCHEMA, dispatch_tool
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 
 # 1. 初始化两个大模型的客户端
@@ -43,6 +43,9 @@ def ds_general_reply(user_id, chat_history):
     try:
         # 定时任务，需要记忆中包含时间，但是直接加会污染记忆库，所以这里用 temp_history
         temp_history = copy.copy(chat_history)
+
+        # 确定时区位置：强行指定东八区（北京时间 UTC+8），防止服务器时区作怪
+        beijing_tz = timezone(timedelta(hours=8))
         current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         temp_history.insert(1, {
             "role": "system",
